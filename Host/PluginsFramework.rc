@@ -1,0 +1,39 @@
+#include "Resource.h"
+#include "afxres.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+IDR_MAINFRAME MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    // Plugin commands are appended after the separator at runtime.
+    POPUP "&Plugins"
+    BEGIN
+        MENUITEM "&Refresh Plugins\tF5",        ID_PLUGINS_REFRESH
+        MENUITEM "Detect New Plugins &Automatically", ID_PLUGINS_AUTODETECT
+        MENUITEM SEPARATOR
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About PluginsFramework...",  ID_APP_ABOUT
+    END
+END
+
+IDR_MAINFRAME ACCELERATORS
+BEGIN
+    VK_F5,          ID_PLUGINS_REFRESH,     VIRTKEY, NOINVERT
+END
+
+STRINGTABLE
+BEGIN
+    IDR_MAINFRAME           "PluginsFramework"
+    ID_PLUGINS_REFRESH      "Rescan the registry for plugins\nRefresh Plugins"
+    ID_PLUGINS_AUTODETECT   "Load and unload plugins automatically as they are registered or unregistered\nAuto-detect Plugins"
+    // Sizes the status bar pane; replaced at runtime.
+    ID_INDICATOR_PLUGINS    "000 plugin(s) enabled, 000 disabled"
+END
+
+#include "afxres.rc"

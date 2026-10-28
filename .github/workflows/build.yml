@@ -1,0 +1,159 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump (auto = derive from commit messages)'
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: x64      # solution platform
+            outdir: x64        # bin\<outdir>\Release
+          - platform: x86
+            outdir: Win32
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build Release
+        run: >
+          msbuild PluginsFramework.sln
+          /p:Configuration=Release
+          /p:Platform=${{ matrix.platform }}
+          /m /nologo /v:minimal
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "bin\${{ matrix.outdir }}\Release"
+          $stage = "artifacts\PluginsFramework-${{ matrix.outdir }}"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item "$out\PluginsFramework.exe", "$out\SamplePlugin.dll", README.md $stage
+          # Plugin SDK: same relative layout as the repo, so the template and
+          # New-Plugin.ps1 work unchanged when unzipped.
+          $sdk = "$stage\sdk"
+          foreach ($dir in 'Shared', 'PluginTemplate', 'tools', 'docs') {
+            New-Item -ItemType Directory -Force "$sdk\$dir" | Out-Null
+          }
+          Copy-Item Shared\IPlugin.h "$sdk\Shared"
+          Copy-Item PluginTemplate\* "$sdk\PluginTemplate"
+          Copy-Item tools\New-Plugin.ps1 "$sdk\tools"
+          Copy-Item docs\PLUGIN_DEVELOPMENT.md "$sdk\docs"
+          Compress-Archive -Path "$stage\*" -DestinationPath "artifacts\PluginsFramework-${{ matrix.outdir }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PluginsFramework-${{ matrix.outdir }}
+          path: artifacts/PluginsFramework-${{ matrix.outdir }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Tag and release
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # full history + tags for version calculation
+
+      - name: Compute next version
+        id: version
+        env:
+          BUMP_INPUT: ${{ github.event.inputs.bump || 'auto' }}
+        run: |
+          set -euo pipefail
+          latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+
+          if [ -z "$latest" ]; then
+            echo "No previous release tag; starting at v1.0.0"
+            echo "tag=v1.0.0" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$(git rev-list "$latest..HEAD")" ]; then
+            echo "HEAD is already released as $latest; nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          log=$(git log "$latest..HEAD" --format=%B)
+          if [[ "$log" == *"[skip release]"* && "$BUMP_INPUT" == auto ]]; then
+            echo "Commit requested [skip release]."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          bump="$BUMP_INPUT"
+          if [ "$bump" = auto ]; then
+            # Conventional-commit style: "feat!:" / "BREAKING CHANGE" / "#major" -> major,
+            # "feat:" / "#minor" -> minor, anything else -> patch.
+            if grep -qiE '#major|BREAKING[ -]CHANGE|^[a-z]+(\([^)]*\))?!:' <<< "$log"; then
+              bump=major
+            elif grep -qiE '#minor|^feat(\([^)]*\))?:' <<< "$log"; then
+              bump=minor
+            else
+              bump=patch
+            fi
+          fi
+
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          next="v$major.$minor.$patch"
+          echo "$latest -> $next ($bump)"
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        if: steps.version.outputs.skip == 'false'
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create tag and GitHub release
+        if: steps.version.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          for f in dist/PluginsFramework-*.zip; do
+            mv "$f" "${f/PluginsFramework-/PluginsFramework-$TAG-}"
+          done
+          ls -l dist
+          # gh creates the tag on the built commit.
+          gh release create "$TAG" dist/*.zip \
+            --target "$GITHUB_SHA" \
+            --title "PluginsFramework $TAG" \
+            --generate-notes

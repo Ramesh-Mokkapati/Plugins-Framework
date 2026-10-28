@@ -1,0 +1,44 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+Win32/
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.idb
+*.ipch
+*.iobj
+*.ipdb
+*.exp
+*.lib
+*.res
+*.tlog
+*.lastbuildstate
+*.log
+*.aps
+
+# Visual Studio state
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+ipch/
+enc_temp_folder/
+
+# Release packaging
+artifacts/
+*.zip
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -1,0 +1,31 @@
+#include "resource.h"
+#include <winres.h>
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+IDR_SAMPLEPLUGIN    REGISTRY    "SamplePlugin.rgs"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEOS 0x40004L
+ FILETYPE 0x2L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "PluginsFramework Sample Plugin"
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", "SamplePlugin.dll"
+            VALUE "OriginalFilename", "SamplePlugin.dll"
+            VALUE "ProductName", "PluginsFramework"
+            VALUE "ProductVersion", "1.0.0.0"
+            VALUE "OLESelfRegister", ""
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
